@@ -25,7 +25,7 @@ impl Application for SlimeSim {
     type Flags = ();
 
     fn new(flags: Self::Flags) -> (Self, iced::Command<Self::Message>) {
-        let agents = 10;
+        let agents = 10000;
         let sim = Sim {
             scale: 3.0,
             agents: (0..agents)
@@ -33,12 +33,12 @@ impl Application for SlimeSim {
                 .map(|a| Agent {
                     x: 128.0,
                     y: 128.0,
-                    dx: a.cos(),
-                    dy: a.sin(),
+                    a,
                 })
                 .collect(),
             pixs: (0..(256 * 256)).map(|_| 0).collect(),
             evap: 10,
+            wander: 0.1,
             rng: Xorshift128::from_seed(&[2, 3]),
         };
         (Self { sim }, Command::none())
@@ -72,6 +72,7 @@ struct Sim {
     agents: Vec<Agent>,
     pixs: Vec<u8>,
     evap: u8,
+    wander: f32,
     rng: Xorshift128,
 }
 
@@ -79,8 +80,7 @@ struct Sim {
 struct Agent {
     x: f32,
     y: f32,
-    dx: f32,
-    dy: f32,
+    a: f32,
 }
 
 impl Sim {
@@ -90,23 +90,29 @@ impl Sim {
         }
 
         for ag in self.agents.iter_mut() {
-            ag.x += ag.dx;
-            ag.y += ag.dy;
+            let da = (self.rng.next_f32() * 2.0 - 1.0) * self.wander;
+            let dx = ag.a.cos();
+            let dy = ag.a.sin();
+            ag.x += dx;
+            ag.y += dy;
+            ag.a += da;
+
+            // TODO Fix reflections
             if ag.x < 0.0 {
                 ag.x = -ag.x;
-                ag.dx = -ag.dx;
+                ag.a = (180.0 - ag.a) % 360.0;
             }
-            if ag.x > 255.0 {
+            if ag.x > 256.0 {
                 ag.x = 2.0 * 255.0 - ag.x;
-                ag.dx = -ag.dx;
+                ag.a = (180.0 - ag.a) % 360.0;
             }
             if ag.y < 0.0 {
                 ag.y = -ag.y;
-                ag.dy = -ag.dy;
+                ag.a = (0.0 - ag.a) % 360.0;
             }
-            if ag.y > 255.0 {
+            if ag.y > 256.0 {
                 ag.y = 2.0 * 255.0 - ag.y;
-                ag.dy = -ag.dy;
+                ag.a = (0.0 - ag.a) % 360.0;
             }
 
             let x = (ag.x as usize).min(255);
