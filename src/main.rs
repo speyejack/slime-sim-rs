@@ -38,7 +38,8 @@ impl Application for SlimeSim {
                 .collect(),
             pixs: (0..(256 * 256)).map(|_| 0).collect(),
             evap: 10,
-            wander: 0.1,
+            wander: 0.01,
+            steer: 0.05,
             rng: Xorshift128::from_seed(&[2, 3]),
         };
         (Self { sim }, Command::none())
@@ -73,6 +74,7 @@ struct Sim {
     pixs: Vec<u8>,
     evap: u8,
     wander: f32,
+    steer: f32,
     rng: Xorshift128,
 }
 
@@ -91,11 +93,26 @@ impl Sim {
 
         for ag in self.agents.iter_mut() {
             let da = (self.rng.next_f32() * 2.0 - 1.0) * self.wander;
+
+            let mut steer_dir = [0.0, 0.0];
+            for off_angle in [-30.0, 0.0, 30.0] {
+                let angle = ag.a + off_angle;
+                let dx = angle.cos();
+                let dy = angle.sin();
+
+                let index = get_index(dx + ag.x, dy + ag.y);
+                let val = self.pixs[index] as f32;
+                steer_dir[0] += val * dx;
+                steer_dir[1] += val * dy;
+            }
+            let steer_angle = (steer_dir[1] / steer_dir[0]).atan() * self.steer;
+
             let dx = ag.a.cos();
             let dy = ag.a.sin();
+
             ag.x += dx;
             ag.y += dy;
-            ag.a += da;
+            ag.a += da + steer_angle;
 
             // TODO Fix reflections
             if ag.x < 0.0 {
@@ -115,9 +132,7 @@ impl Sim {
                 ag.a = (0.0 - ag.a) % 360.0;
             }
 
-            let x = (ag.x as usize).min(255);
-            let y = (ag.y as usize).min(255);
-            let index = (x * 256) + y;
+            let index = get_index(ag.x, ag.y);
             self.pixs[index] = 255;
         }
     }
@@ -175,4 +190,11 @@ fn main() {
         ..Settings::default()
     })
     .unwrap();
+}
+
+fn get_index(x: f32, y: f32) -> usize {
+    let x = (x as usize).min(255);
+    let y = (y as usize).min(255);
+    let index = (x * 256) + y;
+    index
 }
